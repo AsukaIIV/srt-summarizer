@@ -12,7 +12,7 @@ import requests
 
 # ══════════════════════════════════════════════
 #  ★ 在此填写你的 DeepSeek API Key ★
-API_KEY = "sk-xxxxxxxxxxxxx"
+API_KEY = "sk-xxxxxxxxxxxxxxxx"
 #  模型：deepseek-chat / deepseek-reasoner
 MODEL   = "deepseek-reasoner"
 # ══════════════════════════════════════════════
@@ -516,6 +516,39 @@ class App(tk.Tk):
         ttk.Progressbar(prog_outer, variable=self._prog_var,
                         maximum=100).pack(fill="x")
 
+        # ── 底部操作栏 ─────────────────────────
+        Divider(self).pack(fill="x", pady=(10, 0))
+        bottom = tk.Frame(self, bg=C["surface"], pady=12)
+        bottom.pack(fill="x")
+
+        btn_row = tk.Frame(bottom, bg=C["surface"])
+        btn_row.pack(padx=20, fill="x")
+
+        self._run_btn = PrimaryButton(
+            btn_row, "▶  开始总结", self._start,
+            bg_normal=C["green"], bg_hover=C["green_h"],
+            font_size=11, bold=True)
+        self._run_btn.pack(side="left", ipady=4)
+
+        GhostButton(btn_row, "清空输出", self._clear_out,
+                    font_size=9).pack(side="left", padx=(10, 0))
+
+        self._src_btn = tk.Button(
+            btn_row, text="📁  输出到源目录：关",
+            command=self._toggle_save_to_src,
+            bg=C["surface2"], fg=C["fg2"],
+            activebackground=C["surface2"], activeforeground=C["green"],
+            relief="flat", bd=1,
+            highlightthickness=1, highlightbackground=C["border"],
+            cursor="hand2", font=("Segoe UI", 9),
+            padx=10, pady=6)
+        self._src_btn.pack(side="left", padx=(10, 0))
+
+        self._status_var = tk.StringVar(value="就绪，请选择目录")
+        tk.Label(btn_row, textvariable=self._status_var,
+                 bg=C["surface"], fg=C["fg3"],
+                 font=("Segoe UI", 9)).pack(side="right")
+
         # ── 实时输出区 ─────────────────────────
         out_panel = tk.Frame(self, bg=C["surface"],
                              highlightthickness=1,
@@ -567,38 +600,7 @@ class App(tk.Tk):
         self._out_text.tag_config("success", foreground=C["green"])
         self._out_text.tag_config("error",   foreground=C["red"])
 
-        # ── 底部操作栏 ─────────────────────────
-        Divider(self).pack(fill="x", pady=(10, 0))
-        bottom = tk.Frame(self, bg=C["surface"], pady=12)
-        bottom.pack(fill="x")
 
-        btn_row = tk.Frame(bottom, bg=C["surface"])
-        btn_row.pack(padx=20, fill="x")
-
-        self._run_btn = PrimaryButton(
-            btn_row, "▶  开始总结", self._start,
-            bg_normal=C["green"], bg_hover=C["green_h"],
-            font_size=11, bold=True)
-        self._run_btn.pack(side="left", ipady=4)
-
-        GhostButton(btn_row, "清空输出", self._clear_out,
-                    font_size=9).pack(side="left", padx=(10, 0))
-
-        self._src_btn = tk.Button(
-            btn_row, text="📁  输出到源目录：关",
-            command=self._toggle_save_to_src,
-            bg=C["surface2"], fg=C["fg2"],
-            activebackground=C["surface2"], activeforeground=C["green"],
-            relief="flat", bd=1,
-            highlightthickness=1, highlightbackground=C["border"],
-            cursor="hand2", font=("Segoe UI", 9),
-            padx=10, pady=6)
-        self._src_btn.pack(side="left", padx=(10, 0))
-
-        self._status_var = tk.StringVar(value="就绪，请选择目录")
-        tk.Label(btn_row, textvariable=self._status_var,
-                 bg=C["surface"], fg=C["fg3"],
-                 font=("Segoe UI", 9)).pack(side="right")
 
     # ─────────────────────────────────────────
     #  目录选择

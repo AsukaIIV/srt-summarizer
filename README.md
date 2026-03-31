@@ -138,7 +138,7 @@ srt-summarizer/
 ├── srt_summarizer.py   # 主程序
 ├── start.bat           # Windows 一键启动脚本
 ├── README.md           # 项目说明
-└── LICENSE             # 开源协议
+└── img                 # 配图
 ```
 
 ---
@@ -155,10 +155,3 @@ srt-summarizer/
 ## 📄 License
 
 本项目采用 [MIT License](LICENSE) 开源协议。
-
----
-
-## 🙏 致谢
-
-- [DeepSeek](https://www.deepseek.com/) — 提供强大的 AI 模型
-- [Python Tkinter](https://docs.python.org/3/library/tkinter.html) — 图形界面框架

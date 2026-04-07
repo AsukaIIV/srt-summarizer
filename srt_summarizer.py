@@ -436,6 +436,19 @@ class App(tk.Tk):
             font_size=10, bold=True)
         self._scan_btn.pack(fill="x", ipady=2)
 
+        # 分隔线 + 或
+        or_row = tk.Frame(sidebar, bg=C["bg"])
+        or_row.pack(fill="x", pady=(8, 0))
+        tk.Frame(or_row, bg=C["border2"], height=1).pack(
+            side="left", fill="x", expand=True, pady=6)
+        tk.Label(or_row, text=" 或 ", bg=C["bg"], fg=C["fg3"],
+                 font=("Segoe UI", 8)).pack(side="left")
+        tk.Frame(or_row, bg=C["border2"], height=1).pack(
+            side="left", fill="x", expand=True, pady=6)
+
+        GhostButton(sidebar, "📄  选择单个文件", self._pick_files,
+                    font_size=9).pack(fill="x", ipady=2, pady=(4, 0))
+
         # 统计卡片
         stat_card = tk.Frame(sidebar, bg=C["surface"],
                              highlightthickness=1,
@@ -470,6 +483,8 @@ class App(tk.Tk):
         tk.Label(list_hdr, textvariable=self._list_count_var,
                  bg=C["surface"], fg=C["fg3"],
                  font=("Segoe UI", 9)).pack(side="left", padx=6)
+        GhostButton(list_hdr, "移除所选", self._remove_selected,
+                    font_size=8).pack(side="right")
         Divider(file_panel).pack(fill="x")
 
         tree_frame = tk.Frame(file_panel, bg=C["surface2"])
@@ -630,6 +645,49 @@ class App(tk.Tk):
         self._prog_label.set("扫描完成，可以开始总结")
         self._out_append(
             f"» 扫描完成  {d}\n» 发现 {n} 个文件 (.srt / .txt / .md)\n\n", "dim")
+
+    def _remove_selected(self):
+        selected = self._tree.selection()
+        if not selected:
+            return
+        for iid in selected:
+            self._tree.delete(iid)
+            if iid in self._srt_files:
+                self._srt_files.remove(iid)
+        n = len(self._srt_files)
+        self._stat_var.set(str(n) if n else "—")
+        self._list_count_var.set(f"({n} 个)" if n else "")
+
+    def _pick_files(self):
+        files = filedialog.askopenfilenames(
+            title="选择 .srt / .txt / .md 文件",
+            filetypes=[
+                ("支持的文件", "*.srt *.txt *.md"),
+                ("SRT 字幕", "*.srt"),
+                ("文本文件", "*.txt"),
+                ("Markdown", "*.md"),
+                ("所有文件", "*.*"),
+            ]
+        )
+        if not files:
+            return
+        self._srt_files.clear()
+        self._srt_files.extend(files)
+        self._dir_var.set("")
+
+        for item in self._tree.get_children():
+            self._tree.delete(item)
+        for fp in self._srt_files:
+            sz  = os.path.getsize(fp)
+            szs = f"{sz/1024:.1f} KB" if sz < 1_048_576 else f"{sz/1_048_576:.1f} MB"
+            self._tree.insert("", "end", iid=fp,
+                              values=(os.path.basename(fp), szs, "待处理"))
+
+        n = len(self._srt_files)
+        self._stat_var.set(str(n) if n else "0")
+        self._list_count_var.set(f"({n} 个)" if n else "")
+        self._prog_label.set("文件已选择，可以开始总结")
+        self._out_append(f"» 已选择 {n} 个文件\n\n", "dim")
 
     def _toggle_save_to_src(self):
         val = not self._save_to_src.get()

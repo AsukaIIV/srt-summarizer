@@ -46,7 +46,7 @@ SPACE = UI_METRICS["space"]
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("SRT SUMMARIZER")
+        self.title("SRT-SUMMARIZER")
         self.configure(bg=C["bg"])
         self.resizable(True, True)
 
@@ -114,7 +114,7 @@ class App(tk.Tk):
         self._brand_row.pack(anchor="w", pady=(2, 0))
         self._brand_mark = tk.Label(self._brand_row, text="✦", bg=C["surface"], fg="#8FC8FF", font=("Segoe UI", FONT["hero"] + 2, "bold"))
         self._brand_mark.pack(side="left")
-        self._brand_label = tk.Label(self._brand_row, text="  SRT SUMMARIZER", bg=C["surface"], fg="#CFE6FB", font=("Segoe UI", FONT["title"] + 1, "bold"))
+        self._brand_label = tk.Label(self._brand_row, text="  SRT-SUMMARIZER", bg=C["surface"], fg="#CFE6FB", font=("Segoe UI", FONT["title"] + 1, "bold"))
         self._brand_label.pack(side="left")
         self._title_label = tk.Label(self._brand_row, text="  课堂资料整理", bg=C["surface"], fg="#FFFFFF", font=("Segoe UI", FONT["title"], "bold"))
         self._title_label.pack(side="left")

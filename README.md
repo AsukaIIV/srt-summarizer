@@ -1,6 +1,6 @@
 <div align="center">
 
-# SRT SUMMARIZER
+# SRT-SUMMARIZER
 
 ### 把课堂字幕、转录文本和课堂视频整理成适合复习的 Markdown 笔记
 
@@ -12,7 +12,7 @@
 
 ## 软件简介
 
-SRT SUMMARIZER 是一个面向学生和日常学习场景的 Windows 桌面工具。
+SRT-SUMMARIZER 是一个面向学生和日常学习场景的 Windows 桌面工具。
 
 它可以把课堂字幕、转录文本、视频截图、往期笔记整理成一份结构清晰、方便复习、适合长期保存的 Markdown 课程笔记。
 
@@ -97,7 +97,7 @@ DeepSeek 官网：<https://platform.deepseek.com/>
 双击运行：
 
 ```text
-SRT SUMMARIZER.exe
+SRT-SUMMARIZER.exe
 ```
 
 你不需要额外安装 Python。

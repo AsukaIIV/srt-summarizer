@@ -1,10 +1,17 @@
 # -*- mode: python ; coding: utf-8 -*-
+import re
 from pathlib import Path
 
 from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs, collect_submodules
 
 ROOT = Path(SPECPATH)
-APP_NAME = "SRT SUMMARIZER"
+VERSION_INFO_PATH = ROOT / "build" / "windows" / "version_info.txt"
+version_info_text = VERSION_INFO_PATH.read_text(encoding="utf-8")
+version_match = re.search(r"APP_VERSION\s*=\s*['\"]([^'\"]+)['\"]", version_info_text)
+if not version_match:
+    raise ValueError(f"APP_VERSION not found in {VERSION_INFO_PATH}")
+APP_VERSION = version_match.group(1)
+APP_NAME = f"SRT-SUMMARIZER-v{APP_VERSION}"
 FFMPEG_SOURCE = ROOT / "vendor" / "ffmpeg" / "win64" / "ffmpeg.exe"
 FONT_SOURCE = ROOT / "HarmonyOS_Sans_SC_Medium.ttf"
 if not FFMPEG_SOURCE.is_file():

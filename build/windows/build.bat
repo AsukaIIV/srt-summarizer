@@ -24,6 +24,13 @@ if errorlevel 1 exit /b 1
 python -m PyInstaller --noconfirm --clean srt_summarizer.spec
 if errorlevel 1 exit /b 1
 
+set "BUILT_EXE="
+for %%F in (dist\SRT-SUMMARIZER-v*.exe) do set "BUILT_EXE=%%~nxF"
+if not defined BUILT_EXE (
+    echo ERROR: Built exe not found in dist
+    exit /b 1
+)
+
 echo.
-echo Build completed: dist\SRT SUMMARIZER.exe
+echo Build completed: dist\%BUILT_EXE%
 endlocal

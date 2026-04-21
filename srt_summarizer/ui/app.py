@@ -18,7 +18,13 @@ from srt_summarizer.processing.lesson_pairing import normalize_video_files, pair
 from srt_summarizer.processing.output_writer import build_output_paths, resolve_output_dir, write_summary_markdown
 from srt_summarizer.processing.video_frames import extract_video_frame_items
 from srt_summarizer.services.config_store import RuntimeConfig, save_runtime_config
-from srt_summarizer.services.dependency_check import check_video_dependencies, ensure_runtime_dependencies, has_ffmpeg
+from srt_summarizer.services.dependency_check import (
+    check_video_dependencies,
+    describe_ffmpeg_source,
+    ensure_runtime_dependencies,
+    has_ffmpeg,
+    resolve_ffmpeg_executable,
+)
 from srt_summarizer.services.llm_client import stream_completion, test_runtime_config
 from srt_summarizer.services.prompt_builder import build_user_prompt, guess_course_name
 from srt_summarizer.services.provider_registry import get_provider, get_provider_labels
@@ -483,8 +489,15 @@ class App(tk.Tk):
         installed = ensure_runtime_dependencies()
         if installed:
             self._out_append(f"» 已自动安装依赖：{', '.join(installed)}\n", "success")
-        if self._video_files and not has_ffmpeg():
-            self._out_append("» 未检测到 ffmpeg，当前使用 OpenCV 规则抽帧\n", "dim")
+        if self._video_files:
+            ffmpeg_path = resolve_ffmpeg_executable()
+            ffmpeg_source = describe_ffmpeg_source()
+            if ffmpeg_path and ffmpeg_source == "bundled":
+                self._out_append(f"» 已检测到内置 ffmpeg：{ffmpeg_path}\n", "dim")
+            elif ffmpeg_path and ffmpeg_source == "system":
+                self._out_append(f"» 已检测到系统 ffmpeg：{ffmpeg_path}\n", "dim")
+            elif not has_ffmpeg():
+                self._out_append("» 未检测到 ffmpeg，当前使用 OpenCV 规则抽帧\n", "dim")
 
         lessons = pair_lessons(self._transcript_files, self._video_files)
         total = len(lessons)

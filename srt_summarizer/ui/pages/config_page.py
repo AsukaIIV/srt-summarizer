@@ -67,8 +67,17 @@ class ConfigPage(ttk.Frame):
         api_key_shell, api_key_entry = self._make_entry_shell(api_card.body, self.app._api_key_var, show="*")
         api_key_shell.grid(row=2, column=1, columnspan=3, sticky="ew", padx=(SPACE["inline"], 0), pady=(SPACE["section"], 0))
 
+        tk.Label(
+            api_card.body,
+            text="当前平台会分别记住自己的模型、接口地址和 API Key。",
+            bg=C["panel"],
+            fg=C["fg2"],
+            font=("Segoe UI", FONT["meta"]),
+            justify="left",
+        ).grid(row=3, column=0, columnspan=4, sticky="w", pady=(SPACE["compact"], 0))
+
         action_row = tk.Frame(api_card.body, bg=C["panel"])
-        action_row.grid(row=3, column=0, columnspan=4, sticky="ew", pady=(SPACE["section"], 0))
+        action_row.grid(row=4, column=0, columnspan=4, sticky="ew", pady=(SPACE["section"], 0))
         GhostButton(action_row, "保存配置", self.app._save_config).pack(side="left")
         self.app._test_btn = GhostButton(action_row, "测试配置", self.app._test_config)
         self.app._test_btn.pack(side="left", padx=(SPACE["compact"], 0))
@@ -84,7 +93,7 @@ class ConfigPage(ttk.Frame):
             justify="left",
             wraplength=760,
         )
-        self.app._config_validation_msg_label.grid(row=4, column=0, columnspan=4, sticky="ew", pady=(SPACE["compact"], 0))
+        self.app._config_validation_msg_label.grid(row=5, column=0, columnspan=4, sticky="ew", pady=(SPACE["compact"], 0))
 
         self._scroll.register_mousewheel_targets(
             header,

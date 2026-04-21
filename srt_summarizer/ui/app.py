@@ -19,7 +19,7 @@ from srt_summarizer.processing.file_scanner import normalize_selected_files, sca
 from srt_summarizer.processing.lesson_pairing import normalize_video_files, pair_lessons
 from srt_summarizer.processing.output_writer import build_output_paths, resolve_output_dir, write_summary_markdown
 from srt_summarizer.processing.video_frames import extract_video_frame_items
-from srt_summarizer.services.config_store import RuntimeConfig, save_runtime_config
+from srt_summarizer.services.config_store import RuntimeConfig, load_provider_runtime_state, save_runtime_config
 from srt_summarizer.services.dependency_check import (
     check_video_dependencies,
     describe_ffmpeg_source,
@@ -60,7 +60,7 @@ class App(tk.Tk):
         self._testing_config = False
         self._provider_labels = get_provider_labels()
         self._video_dependency_status = check_video_dependencies()
-        self._out_placeholder_visible = False
+        self._suspend_provider_memory_sync = False
 
         self._apply_window_geometry()
         build_ttk_style(self)
@@ -81,6 +81,7 @@ class App(tk.Tk):
 
     def _load_initial_config(self):
         config = get_runtime_config()
+        provider_models, provider_urls, provider_api_keys = load_provider_runtime_state()
         self._provider_var = tk.StringVar(value=config.provider)
         self._model_var = tk.StringVar(value=config.model)
         self._base_url_var = tk.StringVar(value=config.base_url)
@@ -100,6 +101,13 @@ class App(tk.Tk):
         self._token_var = tk.StringVar(value="")
         self._cur_file_var = tk.StringVar(value="")
         self._pulse_var = tk.StringVar(value="")
+        self._provider_model_memory: dict[str, str] = provider_models or {}
+        self._provider_url_memory: dict[str, str] = provider_urls or {}
+        self._provider_api_key_memory: dict[str, str] = provider_api_keys or {}
+        if config.provider:
+            self._provider_model_memory[config.provider] = config.model.strip()
+            self._provider_url_memory[config.provider] = config.base_url.strip()
+            self._provider_api_key_memory[config.provider] = config.api_key.strip()
 
     def _build_ui(self):
         nav = tk.Frame(self, bg=C["surface"], height=UI_METRICS["nav_height"] + 4)
@@ -224,20 +232,48 @@ class App(tk.Tk):
     def _on_provider_selected(self, _event=None):
         reverse = {label: key for key, label in self._provider_labels.items()}
         previous_provider = get_provider(self._provider_var.get())
+        previous_provider_key = self._provider_var.get().strip()
         provider_key = reverse.get(self._provider_combo.get(), "deepseek")
         provider = get_provider(provider_key)
         old_model = self._model_var.get().strip()
         old_url = self._base_url_var.get().strip()
-        self._provider_var.set(provider.key)
-        if not old_url or old_url == previous_provider.base_url:
-            self._base_url_var.set(provider.base_url)
-        if not old_model or old_model == previous_provider.default_model:
-            self._model_var.set(provider.default_model)
+        old_api_key = self._api_key_var.get().strip()
+        if previous_provider_key:
+            self._provider_model_memory[previous_provider_key] = old_model or previous_provider.default_model
+            self._provider_url_memory[previous_provider_key] = old_url or previous_provider.base_url
+            self._provider_api_key_memory[previous_provider_key] = old_api_key
+
+        remembered_url = self._provider_url_memory.get(provider.key, "").strip()
+        next_url = remembered_url or provider.base_url
+        remembered_model = self._provider_model_memory.get(provider.key, "").strip()
+        next_model = remembered_model or provider.default_model
+        next_api_key = self._provider_api_key_memory.get(provider.key, "").strip()
+
+        self._suspend_provider_memory_sync = True
+        try:
+            self._provider_var.set(provider.key)
+            self._base_url_var.set(next_url)
+            self._model_var.set(next_model)
+            self._api_key_var.set(next_api_key)
+        finally:
+            self._suspend_provider_memory_sync = False
+
+        self._provider_model_memory[provider.key] = next_model
+        self._provider_url_memory[provider.key] = next_url
+        self._provider_api_key_memory[provider.key] = next_api_key
+        self._status_var.set(f"已恢复 {provider.label} 的专属配置")
         self._config_tested_ok = False
         self._set_config_validation_message("")
         self._refresh_provider_view()
 
     def _on_config_field_changed(self, *_args):
+        if getattr(self, "_suspend_provider_memory_sync", False):
+            return
+        provider_key = self._provider_var.get().strip()
+        if provider_key:
+            self._provider_model_memory[provider_key] = self._model_var.get().strip()
+            self._provider_url_memory[provider_key] = self._base_url_var.get().strip()
+            self._provider_api_key_memory[provider_key] = self._api_key_var.get().strip()
         self._config_tested_ok = False
         self._set_config_validation_message("")
         self._refresh_provider_view()

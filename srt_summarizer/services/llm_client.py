@@ -7,12 +7,18 @@ import requests
 
 from srt_summarizer.config import SYSTEM_PROMPT
 from srt_summarizer.services.config_store import RuntimeConfig
+from srt_summarizer.services.provider_registry import get_provider
 
 
 JSON_BLOCK_RE = re.compile(r"```(?:json)?\s*(\{[\s\S]*\})\s*```|(?P<plain>\{[\s\S]*\})")
+ANTHROPIC_VERSION = "2023-06-01"
 
 
-def _build_payload(user_prompt: str, model: str, stream: bool = True, max_tokens: int = 8192) -> dict[str, Any]:
+def _get_provider(runtime_config: RuntimeConfig):
+    return get_provider(runtime_config.provider)
+
+
+def _build_openai_payload(user_prompt: str, model: str, stream: bool = True, max_tokens: int = 8192) -> dict[str, Any]:
     return {
         "model": model,
         "stream": stream,
@@ -25,13 +31,95 @@ def _build_payload(user_prompt: str, model: str, stream: bool = True, max_tokens
     }
 
 
-def _extract_delta(line: str) -> str:
+def _build_anthropic_payload(user_prompt: str, model: str, stream: bool = True, max_tokens: int = 8192) -> dict[str, Any]:
+    return {
+        "model": model,
+        "stream": stream,
+        "system": SYSTEM_PROMPT,
+        "max_tokens": max_tokens,
+        "messages": [{"role": "user", "content": [{"type": "text", "text": user_prompt}]}],
+    }
+
+
+def _build_test_payload(runtime_config: RuntimeConfig) -> dict[str, Any]:
+    provider = _get_provider(runtime_config)
+    if provider.api_style == "anthropic_messages":
+        return {
+            "model": runtime_config.model,
+            "stream": False,
+            "max_tokens": 16,
+            "system": "You are a connectivity test.",
+            "messages": [{"role": "user", "content": [{"type": "text", "text": "Reply with ok."}]}],
+        }
+    return {
+        "model": runtime_config.model,
+        "stream": False,
+        "max_tokens": 16,
+        "messages": [
+            {"role": "system", "content": "You are a connectivity test."},
+            {"role": "user", "content": "Reply with ok."},
+        ],
+    }
+
+
+def _build_headers(runtime_config: RuntimeConfig) -> dict[str, str]:
+    provider = _get_provider(runtime_config)
+    if provider.api_style == "anthropic_messages":
+        return {
+            "x-api-key": runtime_config.api_key,
+            "anthropic-version": ANTHROPIC_VERSION,
+            "Content-Type": "application/json",
+        }
+    return {
+        "Authorization": f"Bearer {runtime_config.api_key}",
+        "Content-Type": "application/json",
+    }
+
+
+def _extract_openai_delta(line: str) -> str:
     if line.startswith("data:"):
         line = line[5:].strip()
     if line == "[DONE]":
         return ""
     chunk = json.loads(line)
     return chunk["choices"][0]["delta"].get("content", "")
+
+
+def _extract_anthropic_delta(line: str) -> str:
+    if line.startswith("event:"):
+        return ""
+    if not line.startswith("data:"):
+        return ""
+    payload = line[5:].strip()
+    if not payload:
+        return ""
+    chunk = json.loads(payload)
+    if chunk.get("type") == "content_block_delta":
+        delta = chunk.get("delta", {})
+        if isinstance(delta, dict):
+            return str(delta.get("text", ""))
+    return ""
+
+
+def _extract_openai_content(data: dict[str, Any]) -> str:
+    message = data.get("choices", [{}])[0].get("message", {})
+    content = message.get("content", "")
+    if isinstance(content, list):
+        content = "".join(str(item.get("text", "")) for item in content if isinstance(item, dict))
+    return str(content).strip()
+
+
+def _extract_anthropic_content(data: dict[str, Any]) -> str:
+    content = data.get("content", [])
+    if not isinstance(content, list):
+        return ""
+    parts: list[str] = []
+    for item in content:
+        if not isinstance(item, dict):
+            continue
+        if item.get("type") == "text":
+            parts.append(str(item.get("text", "")))
+    return "".join(parts).strip()
 
 
 def _format_request_error(error: Exception) -> str:
@@ -50,21 +138,13 @@ def _format_request_error(error: Exception) -> str:
 
 
 def test_runtime_config(runtime_config: RuntimeConfig) -> tuple[bool, str]:
-    headers = {
-        "Authorization": f"Bearer {runtime_config.api_key}",
-        "Content-Type": "application/json",
-    }
-    payload = {
-        "model": runtime_config.model,
-        "stream": False,
-        "max_tokens": 16,
-        "messages": [
-            {"role": "system", "content": "You are a connectivity test."},
-            {"role": "user", "content": "Reply with ok."},
-        ],
-    }
     try:
-        resp = requests.post(runtime_config.base_url, headers=headers, json=payload, timeout=30)
+        resp = requests.post(
+            runtime_config.base_url,
+            headers=_build_headers(runtime_config),
+            json=_build_test_payload(runtime_config),
+            timeout=30,
+        )
         resp.raise_for_status()
         return True, "配置可用"
     except Exception as e:
@@ -75,24 +155,22 @@ def completion(runtime_config: RuntimeConfig, user_prompt: str, max_tokens: int 
     user_prompt = user_prompt.strip()
     if not user_prompt:
         raise ValueError("输入内容为空")
-    headers = {
-        "Authorization": f"Bearer {runtime_config.api_key}",
-        "Content-Type": "application/json",
-    }
+    provider = _get_provider(runtime_config)
+    payload = (
+        _build_anthropic_payload(user_prompt, runtime_config.model, stream=False, max_tokens=max_tokens)
+        if provider.api_style == "anthropic_messages"
+        else _build_openai_payload(user_prompt, runtime_config.model, stream=False, max_tokens=max_tokens)
+    )
     try:
         resp = requests.post(
             runtime_config.base_url,
-            headers=headers,
-            json=_build_payload(user_prompt, runtime_config.model, stream=False, max_tokens=max_tokens),
+            headers=_build_headers(runtime_config),
+            json=payload,
             timeout=180,
         )
         resp.raise_for_status()
         data = resp.json()
-        message = data.get("choices", [{}])[0].get("message", {})
-        content = message.get("content", "")
-        if isinstance(content, list):
-            content = "".join(str(item.get("text", "")) for item in content if isinstance(item, dict))
-        content = str(content).strip()
+        content = _extract_anthropic_content(data) if provider.api_style == "anthropic_messages" else _extract_openai_content(data)
         if not content:
             raise ValueError("模型未返回有效内容")
         return content
@@ -123,15 +201,18 @@ def stream_completion(
         on_error("输入内容为空")
         return
 
-    headers = {
-        "Authorization": f"Bearer {runtime_config.api_key}",
-        "Content-Type": "application/json",
-    }
+    provider = _get_provider(runtime_config)
+    payload = (
+        _build_anthropic_payload(user_prompt, runtime_config.model, stream=True, max_tokens=8192)
+        if provider.api_style == "anthropic_messages"
+        else _build_openai_payload(user_prompt, runtime_config.model, stream=True, max_tokens=8192)
+    )
+    delta_parser = _extract_anthropic_delta if provider.api_style == "anthropic_messages" else _extract_openai_delta
     try:
         with requests.post(
             runtime_config.base_url,
-            headers=headers,
-            json=_build_payload(user_prompt, runtime_config.model, stream=True, max_tokens=8192),
+            headers=_build_headers(runtime_config),
+            json=payload,
             stream=True,
             timeout=180,
         ) as resp:
@@ -142,10 +223,10 @@ def stream_completion(
                 if not raw_line:
                     continue
                 line = raw_line.decode("utf-8") if isinstance(raw_line, bytes) else raw_line
-                if line.startswith("data:") and line[5:].strip() == "[DONE]":
+                if provider.api_style != "anthropic_messages" and line.startswith("data:") and line[5:].strip() == "[DONE]":
                     break
                 try:
-                    delta = _extract_delta(line)
+                    delta = delta_parser(line)
                 except Exception:
                     parse_error = True
                     continue

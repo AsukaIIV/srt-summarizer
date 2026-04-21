@@ -193,6 +193,8 @@ class App(tk.Tk):
             self._set_config_state_chip("已配置", "warn")
         provider = get_provider(config.provider)
         self._provider_badge.set(f"{provider.label} · {config.model}", "info")
+        if hasattr(self, "_config_validation_msg_var") and not self._config_validation_msg_var.get().strip() and provider.config_help_text:
+            self._set_config_validation_message(provider.config_help_text)
 
     def _refresh_tree(self):
         self._run_page.refresh_tree()

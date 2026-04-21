@@ -10,7 +10,7 @@ PLACEHOLDER_API_KEYS = {"", "sk-xxxxxxxxxxxxxxxx", "sk-xxx"}
 runtime_config = load_runtime_config()
 DEFAULT_PROVIDER = runtime_config.provider
 DEFAULT_MODEL = runtime_config.model
-DEFAULT_DEEPSEEK_URL = runtime_config.base_url
+DEFAULT_BASE_URL = runtime_config.base_url
 DEFAULT_API_KEY = runtime_config.api_key
 DEFAULT_OUTPUT_DIR = runtime_config.output_dir
 DEFAULT_SAVE_TO_SOURCE = runtime_config.save_to_source
@@ -47,7 +47,7 @@ def get_runtime_config() -> RuntimeConfig:
     return RuntimeConfig(
         provider=provider_def.key,
         model=_clean_env("LLM_MODEL", DEFAULT_MODEL or provider_def.default_model),
-        base_url=_clean_env("LLM_BASE_URL", DEFAULT_DEEPSEEK_URL or provider_def.base_url),
+        base_url=_clean_env("LLM_BASE_URL", DEFAULT_BASE_URL or provider_def.base_url),
         api_key=_clean_env("LLM_API_KEY", DEFAULT_API_KEY),
         output_dir=DEFAULT_OUTPUT_DIR,
         save_to_source=DEFAULT_SAVE_TO_SOURCE,

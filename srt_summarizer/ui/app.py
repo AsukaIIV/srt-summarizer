@@ -12,6 +12,8 @@ from srt_summarizer.config import (
 )
 from srt_summarizer.constants import C, COMPACT_BREAKPOINT, DEFAULT_MIN_SIZE, DEFAULT_WINDOW_SIZE, UI_METRICS
 from srt_summarizer.processing.course_context import build_course_context
+from srt_summarizer.processing.diagram_renderer import get_last_font_source, render_diagram_entries
+from srt_summarizer.processing.diagram_specs import extract_diagram_specs
 from srt_summarizer.processing.file_loader import parse_file, parse_srt_segments
 from srt_summarizer.processing.file_scanner import normalize_selected_files, scan_supported_files, scan_video_files
 from srt_summarizer.processing.lesson_pairing import normalize_video_files, pair_lessons
@@ -573,11 +575,21 @@ class App(tk.Tk):
                 done_evt.wait()
                 if err_box[0]:
                     raise RuntimeError(err_box[0])
+                clean_result, diagram_specs, diagram_parse_warnings = extract_diagram_specs(result_box[0] or "")
+                for warning in diagram_parse_warnings:
+                    self._out_append(f"» {warning}\n", "dim")
+                diagram_entries, diagram_render_warnings = render_diagram_entries(diagram_specs, image_dir)
+                if diagram_entries:
+                    self._out_append(f"» 已生成 {len(diagram_entries)} 张结构化图示\n", "dim")
+                    self._out_append(f"» 图示字体：{get_last_font_source()}\n", "dim")
+                for warning in diagram_render_warnings:
+                    self._out_append(f"» {warning}\n", "dim")
+                all_image_entries = image_entries + diagram_entries
                 write_summary_markdown(
                     note_path,
                     lesson.transcript_path,
-                    result_box[0] or "",
-                    image_entries=image_entries,
+                    clean_result,
+                    image_entries=all_image_entries,
                     provider_label=get_provider(runtime_config.provider).label,
                     model_name=runtime_config.model,
                 )

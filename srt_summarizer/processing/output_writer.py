@@ -126,6 +126,14 @@ def _render_image_block(entry: dict[str, str], image_number: int, confidence: fl
     rel_path = str(entry.get("relative_path", "")).replace('\\', '/')
     if not rel_path:
         return ""
+    if str(entry.get("kind", "")).strip() == "diagram":
+        title = str(entry.get("title", "")).strip()
+        caption = str(entry.get("caption", "")).strip()
+        alt = title or f"结构化图示 {image_number}"
+        lines = [f"![{alt}]({rel_path})"]
+        if caption:
+            lines.append(f"> 图示说明：{caption}")
+        return "\n".join(lines)
     lines = [f"![课堂截图 {image_number}]({rel_path})"]
     snippet = str(entry.get("snippet", "")).strip()
     timestamp = str(entry.get("timestamp", "")).strip()
@@ -141,11 +149,23 @@ def _render_image_block(entry: dict[str, str], image_number: int, confidence: fl
 
 
 def _build_appendix_block(entries: list[dict[str, str]], start_index: int) -> str:
-    lines = ["## 课堂截图补充", ""]
+    title = "## 结构化图示补充" if entries and str(entries[0].get("kind", "")).strip() == "diagram" else "## 课堂截图补充"
+    lines = [title, ""]
     for image_number, entry in enumerate(entries, start=start_index):
         lines.append(_render_image_block(entry, image_number, confidence=0.0))
         lines.append("")
     return "\n".join(lines).strip() + "\n"
+
+
+def _split_entry_kinds(entries: list[dict[str, str]]) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
+    screenshots: list[dict[str, str]] = []
+    diagrams: list[dict[str, str]] = []
+    for entry in entries:
+        if str(entry.get("kind", "")).strip() == "diagram":
+            diagrams.append(entry)
+        else:
+            screenshots.append(entry)
+    return screenshots, diagrams
 
 
 def _replace_image_anchors(content: str, image_entries: list[dict[str, str]]) -> tuple[str, list[dict[str, str]], int]:
@@ -174,85 +194,93 @@ def _replace_image_anchors(content: str, image_entries: list[dict[str, str]]) ->
 def inject_images_into_markdown(content: str, image_entries: list[dict[str, str]]) -> str:
     if not image_entries:
         return content
-    anchored, remaining_entries, next_image_number = _replace_image_anchors(content, image_entries)
-    if not remaining_entries:
-        return anchored
-    normalized = normalize_markdown_content(anchored)
-    prefix, sections = _split_markdown_sections(normalized)
-    if not sections:
-        appendix = _build_appendix_block(remaining_entries, next_image_number)
-        return normalize_markdown_content(f"{normalized}\n{appendix}")
+    screenshot_entries, diagram_entries = _split_entry_kinds(image_entries)
+    anchored = normalize_markdown_content(content)
+    next_image_number = 1
+    if screenshot_entries:
+        anchored, remaining_entries, next_image_number = _replace_image_anchors(content, screenshot_entries)
+        if remaining_entries:
+            normalized = normalize_markdown_content(anchored)
+            prefix, sections = _split_markdown_sections(normalized)
+            if not sections:
+                appendix = _build_appendix_block(remaining_entries, next_image_number)
+                anchored = normalize_markdown_content(f"{normalized}\n{appendix}")
+            else:
+                candidates: list[dict] = []
+                for entry_index, entry in enumerate(remaining_entries):
+                    for section_index, section in enumerate(sections):
+                        score = _score_entry_against_section(entry, section, section_index, len(sections))
+                        if score <= 0:
+                            continue
+                        candidates.append(
+                            {
+                                "entry_index": entry_index,
+                                "section_index": section_index,
+                                "score": score,
+                            }
+                        )
+                candidates.sort(key=lambda item: item["score"], reverse=True)
 
-    candidates: list[dict] = []
-    for entry_index, entry in enumerate(remaining_entries):
-        for section_index, section in enumerate(sections):
-            score = _score_entry_against_section(entry, section, section_index, len(sections))
-            if score <= 0:
-                continue
-            candidates.append(
-                {
-                    "entry_index": entry_index,
-                    "section_index": section_index,
-                    "score": score,
-                }
-            )
-    candidates.sort(key=lambda item: item["score"], reverse=True)
+                max_per_section = 1 if len(remaining_entries) <= len(sections) else 2
+                assigned_entries: set[int] = set()
+                section_counts = [0] * len(sections)
+                section_images: list[list[tuple[int, dict[str, str], float]]] = [[] for _ in sections]
+                appendix_entries: list[dict[str, str]] = []
 
-    max_per_section = 1 if len(remaining_entries) <= len(sections) else 2
-    assigned_entries: set[int] = set()
-    section_counts = [0] * len(sections)
-    section_images: list[list[tuple[int, dict[str, str], float]]] = [[] for _ in sections]
-    appendix_entries: list[dict[str, str]] = []
+                for candidate in candidates:
+                    entry_index = candidate["entry_index"]
+                    section_index = candidate["section_index"]
+                    score = candidate["score"]
+                    if entry_index in assigned_entries:
+                        continue
+                    if score < 2.6:
+                        continue
+                    if section_counts[section_index] >= max_per_section:
+                        continue
+                    section_images[section_index].append((entry_index, remaining_entries[entry_index], score))
+                    section_counts[section_index] += 1
+                    assigned_entries.add(entry_index)
 
-    for candidate in candidates:
-        entry_index = candidate["entry_index"]
-        section_index = candidate["section_index"]
-        score = candidate["score"]
-        if entry_index in assigned_entries:
-            continue
-        if score < 2.6:
-            continue
-        if section_counts[section_index] >= max_per_section:
-            continue
-        section_images[section_index].append((entry_index, remaining_entries[entry_index], score))
-        section_counts[section_index] += 1
-        assigned_entries.add(entry_index)
+                strong_fallback_sections = sorted(
+                    range(len(sections)),
+                    key=lambda idx: len(_extract_tokens(sections[idx]["heading"] + " " + sections[idx]["subsections"] + " " + sections[idx]["excerpt"])),
+                    reverse=True,
+                )
+                for entry_index, entry in enumerate(remaining_entries):
+                    if entry_index in assigned_entries:
+                        continue
+                    placed = False
+                    for section_index in strong_fallback_sections:
+                        if section_counts[section_index] >= max_per_section:
+                            continue
+                        if len(remaining_entries) <= len(sections):
+                            break
+                        section_images[section_index].append((entry_index, entry, 0.0))
+                        section_counts[section_index] += 1
+                        assigned_entries.add(entry_index)
+                        placed = True
+                        break
+                    if not placed:
+                        appendix_entries.append(entry)
 
-    strong_fallback_sections = sorted(
-        range(len(sections)),
-        key=lambda idx: len(_extract_tokens(sections[idx]["heading"] + " " + sections[idx]["subsections"] + " " + sections[idx]["excerpt"])),
-        reverse=True,
-    )
-    for entry_index, entry in enumerate(remaining_entries):
-        if entry_index in assigned_entries:
-            continue
-        placed = False
-        for section_index in strong_fallback_sections:
-            if section_counts[section_index] >= max_per_section:
-                continue
-            if len(remaining_entries) <= len(sections):
-                break
-            section_images[section_index].append((entry_index, entry, 0.0))
-            section_counts[section_index] += 1
-            assigned_entries.add(entry_index)
-            placed = True
-            break
-        if not placed:
-            appendix_entries.append(entry)
-
-    built: list[str] = []
-    if prefix.strip():
-        built.append(prefix.rstrip() + "\n\n")
-    image_number = next_image_number
-    for section_index, section in enumerate(sections):
-        built.append(section["block"].rstrip() + "\n")
-        if section_images[section_index]:
-            for _entry_index, entry, score in sorted(section_images[section_index], key=lambda item: item[0]):
-                built.append("\n" + _render_image_block(entry, image_number, score) + "\n")
-                image_number += 1
-    if appendix_entries:
-        built.append("\n" + _build_appendix_block(appendix_entries, image_number))
-    return normalize_markdown_content("".join(built))
+                built: list[str] = []
+                if prefix.strip():
+                    built.append(prefix.rstrip() + "\n\n")
+                image_number = next_image_number
+                for section_index, section in enumerate(sections):
+                    built.append(section["block"].rstrip() + "\n")
+                    if section_images[section_index]:
+                        for _entry_index, entry, score in sorted(section_images[section_index], key=lambda item: item[0]):
+                            built.append("\n" + _render_image_block(entry, image_number, score) + "\n")
+                            image_number += 1
+                if appendix_entries:
+                    built.append("\n" + _build_appendix_block(appendix_entries, image_number))
+                anchored = normalize_markdown_content("".join(built))
+                next_image_number = image_number
+    if diagram_entries:
+        diagram_block = _build_appendix_block(diagram_entries, next_image_number)
+        anchored = normalize_markdown_content(f"{anchored}\n{diagram_block}")
+    return anchored
 
 
 def write_summary_markdown(

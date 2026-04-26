@@ -2,12 +2,13 @@ import tkinter as tk
 from tkinter import scrolledtext, ttk
 
 from srt_summarizer.constants import C, UI_METRICS
-from srt_summarizer.ui.widgets import GhostButton, PrimaryButton, ScrollableFrame, SectionCard, StatusChip
+from srt_summarizer.ui.widgets import GhostButton, PrimaryButton, SectionCard, StatusChip
 
 
 FONT = UI_METRICS["font"]
 SPACE = UI_METRICS["space"]
 OUTPUT_PADDING = UI_METRICS["output_padding"]
+CONSOLE_MIN_HEIGHT = 200
 
 
 class StatusPage(ttk.Frame):
@@ -17,21 +18,23 @@ class StatusPage(ttk.Frame):
         self._build_ui()
 
     def _build_ui(self):
+        # 整个页面分为两行：
+        # row 0: 顶部控件（header + 进度卡片）— 自然高度，不可滚动
+        # row 1: Console — 撑满剩余空间，保留最低高度
         self.columnconfigure(0, weight=1)
-        self.rowconfigure(0, weight=1)
+        self.rowconfigure(0, weight=0)
+        self.rowconfigure(1, weight=1, minsize=CONSOLE_MIN_HEIGHT)
 
-        scroll = ScrollableFrame(self, bg=C["bg"])
-        scroll.grid(row=0, column=0, sticky="nsew")
-        self._scroll = scroll
-        body = scroll.content
-        body.columnconfigure(0, weight=1)
-        body.rowconfigure(2, weight=1)
+        # ── row 0: 顶部区域 ──
+        top_frame = tk.Frame(self, bg=C["bg"])
+        top_frame.grid(row=0, column=0, sticky="ew")
+        top_frame.columnconfigure(0, weight=1)
 
-        header = tk.Frame(body, bg=C["bg"])
+        header = tk.Frame(top_frame, bg=C["bg"])
         header.grid(row=0, column=0, sticky="ew", padx=SPACE["outer"], pady=(SPACE["section"], 0))
         tk.Label(header, text="开始运行", bg=C["bg"], fg=C["fg"], font=("Segoe UI", FONT["title"], "bold")).pack(anchor="w")
 
-        progress_card = SectionCard(body, "进度总览")
+        progress_card = SectionCard(top_frame, "进度总览")
         progress_card.grid(row=1, column=0, sticky="ew", padx=SPACE["outer"], pady=(SPACE["section"], 0))
         controls = tk.Frame(progress_card.body, bg=C["panel"])
         controls.pack(fill="x")
@@ -54,16 +57,23 @@ class StatusPage(ttk.Frame):
         tk.Label(strip, textvariable=self.app._prog_label, bg=C["panel"], fg=C["fg2"], font=("Segoe UI", FONT["label"])).pack(side="right", padx=(0, SPACE["section"]))
         ttk.Progressbar(progress_card.body, variable=self.app._prog_var, maximum=100).pack(fill="x")
 
-        live_card = SectionCard(body, "Console")
-        live_card.grid(row=2, column=0, sticky="nsew", padx=SPACE["outer"], pady=(SPACE["section"], SPACE["section"]))
+        # ── row 1: Console 区域 ──
+        live_card = SectionCard(self, "Console")
+        live_card.grid(row=1, column=0, sticky="nsew", padx=SPACE["outer"], pady=(SPACE["section"], SPACE["section"]))
+        live_card.body.columnconfigure(0, weight=1)
+        live_card.body.rowconfigure(0, weight=0)
+        live_card.body.rowconfigure(1, weight=1)
+
         console_toolbar = tk.Frame(live_card.body, bg=C["panel"])
-        console_toolbar.pack(fill="x")
+        console_toolbar.grid(row=0, column=0, sticky="ew")
         tk.Label(console_toolbar, text="LIVE OUTPUT", bg=C["panel"], fg=C["accent"], font=("Consolas", FONT["mono_small"], "bold")).pack(side="left")
         tk.Label(console_toolbar, textvariable=self.app._cur_file_var, bg=C["panel"], fg=C["fg2"], font=("Segoe UI", FONT["label"])).pack(side="right")
 
-        out_shell = tk.Frame(live_card.body, bg=C["console_bg"], highlightthickness=1, highlightbackground=C["console_border"], height=360)
-        out_shell.pack(fill="both", expand=True, pady=(SPACE["compact"], 0))
-        out_shell.pack_propagate(False)
+        out_shell = tk.Frame(live_card.body, bg=C["console_bg"], highlightthickness=1, highlightbackground=C["console_border"])
+        out_shell.grid(row=1, column=0, sticky="nsew", pady=(SPACE["compact"], 0))
+        out_shell.columnconfigure(0, weight=1)
+        out_shell.rowconfigure(0, weight=1)
+
         self.app._out_text = scrolledtext.ScrolledText(
             out_shell,
             bg=C["console_bg"],
@@ -77,7 +87,7 @@ class StatusPage(ttk.Frame):
             padx=OUTPUT_PADDING["x"],
             pady=OUTPUT_PADDING["y"],
         )
-        self.app._out_text.pack(fill="both", expand=True)
+        self.app._out_text.grid(row=0, column=0, sticky="nsew")
         self.app._out_placeholder = tk.Label(out_shell, bg=C["console_bg"], fg=C["console_accent"], justify="center", font=("Segoe UI", FONT["body"]), text="")
         self.app._out_text.tag_config("h1", foreground=C["console_accent"], font=("Consolas", FONT["output"] + 2, "bold"))
         self.app._out_text.tag_config("h2", foreground=C["console_accent"], font=("Consolas", FONT["output"] + 1, "bold"))
@@ -86,20 +96,6 @@ class StatusPage(ttk.Frame):
         self.app._out_text.tag_config("dim", foreground=C["console_muted"])
         self.app._out_text.tag_config("success", foreground=C["green"])
         self.app._out_text.tag_config("error", foreground=C["red"])
-        self._scroll.register_mousewheel_targets(
-            header,
-            progress_card,
-            progress_card.body,
-            controls,
-            left_controls,
-            strip,
-            live_card,
-            live_card.body,
-            console_toolbar,
-            out_shell,
-            self.app._out_text,
-        )
-        self._scroll.suspend_mousewheel_targets(self.app._out_text)
 
         self.app._cur_file_var.trace_add("write", self._refresh_chips)
         self.app._token_var.trace_add("write", self._refresh_chips)

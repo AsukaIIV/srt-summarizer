@@ -64,6 +64,13 @@ def _match_video(transcript_path: str, video_paths: list[str], exact_map: dict[s
 
 
 def pair_lessons(transcript_paths: list[str], video_paths: list[str]) -> list[LessonInput]:
+    """将字幕路径与视频路径一一配对，返回课程输入列表。
+
+    配对策略：
+    1. 精确文件名匹配（去后缀、忽略大小写）
+    2. 标准化名称匹配（去除分辨率/编码标签）
+    3. Jaccard 相似度评分（阈值 >= 0.45，分差 >= 0.1）
+    """
     videos_by_stem = {
         os.path.splitext(os.path.basename(path))[0].lower(): path for path in video_paths
     }

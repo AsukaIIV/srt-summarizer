@@ -137,14 +137,14 @@ def _render_image_block(entry: dict[str, str], image_number: int, confidence: fl
     lines = [f"![课堂截图 {image_number}]({rel_path})"]
     snippet = str(entry.get("snippet", "")).strip()
     timestamp = str(entry.get("timestamp", "")).strip()
-    if confidence >= 3.5 and snippet:
+    if confidence >= 4.5 and timestamp and not snippet:
+        lines.append(f"> 看图提示：截图时间 {timestamp}")
+    elif confidence >= 3.5 and snippet:
         helper = snippet.replace("\n", " ").strip()
         if len(helper) > 36:
             helper = helper[:36].rstrip() + "…"
         prefix = f"{timestamp} · " if timestamp else ""
         lines.append(f"> 看图提示：{prefix}{helper}")
-    elif confidence >= 4.5 and timestamp:
-        lines.append(f"> 看图提示：截图时间 {timestamp}")
     return "\n".join(lines)
 
 
@@ -192,6 +192,14 @@ def _replace_image_anchors(content: str, image_entries: list[dict[str, str]]) ->
 
 
 def inject_images_into_markdown(content: str, image_entries: list[dict[str, str]]) -> str:
+    """将截图和结构化图示注入 Markdown。
+
+    流程：
+    1. 先替换 LLM 生成的 [[插图N]] 锚点（精确位置）
+    2. 剩余截图按语义评分（_score_entry_against_section）分配到各章节
+    3. 结构化图示追加到文末
+    4. 每个章节最多 2 张截图，最低评分阈值 2.6
+    """
     if not image_entries:
         return content
     screenshot_entries, diagram_entries = _split_entry_kinds(image_entries)

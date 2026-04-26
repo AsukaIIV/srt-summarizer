@@ -70,7 +70,10 @@ def has_python_module(module_name: str) -> bool:
 def ensure_python_package(module_name: str, package_name: str) -> None:
     if has_python_module(module_name):
         return
-    subprocess.check_call([sys.executable, "-m", "pip", "install", package_name])
+    try:
+        subprocess.check_call([sys.executable, "-m", "pip", "install", package_name])
+    except (subprocess.CalledProcessError, OSError) as e:
+        raise RuntimeError(f"自动安装依赖《{package_name}》失败：{e}。请手动执行：pip install {package_name}") from e
 
 
 def ensure_runtime_dependencies() -> list[str]:

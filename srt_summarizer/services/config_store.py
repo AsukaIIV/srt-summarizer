@@ -34,7 +34,10 @@ def _read_json(path: str) -> dict:
     try:
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
-    except (OSError, json.JSONDecodeError):
+    except json.JSONDecodeError:
+        # 保留文件但内容损坏时返回空字典，不覆盖文件
+        return {}
+    except OSError:
         return {}
     return data if isinstance(data, dict) else {}
 

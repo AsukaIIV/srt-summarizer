@@ -37,13 +37,3 @@ def normalize_selected_files(paths) -> list[str]:
         seen.add(path)
         normalized.append(path)
     return normalized
-
-
-def format_file_size(path: str) -> str:
-    try:
-        size = os.path.getsize(path)
-    except OSError:
-        return "读取失败"
-    if size < 1_048_576:
-        return f"{size/1024:.1f} KB"
-    return f"{size/1_048_576:.1f} MB"

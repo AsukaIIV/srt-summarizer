@@ -1,0 +1,198 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="tab-bar" id="tab-bar">
+    <button class="tab-btn active" data-tab="tab-files">
+        <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+        选择文件
+    </button>
+    <button class="tab-btn" data-tab="tab-course">
+        <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        课程设置
+    </button>
+    <button class="tab-btn" data-tab="tab-run">
+        <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        开始运行
+    </button>
+    <button class="tab-btn" data-tab="tab-config">
+        <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        API设置
+    </button>
+    <div class="tab-spacer"></div>
+    <button class="tab-btn" data-tab="tab-about">
+        <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+        关于
+    </button>
+</div>
+
+<!-- Tab 1: 选择文件 -->
+<section id="tab-files" class="tab-panel active">
+    <div class="section-card">
+        <div class="card-header">文件与输出</div>
+        <div class="card-body">
+            <div class="input-group">
+                <label>工作目录</label>
+                <div class="input-row">
+                    <input type="text" id="dir-path" placeholder="选择工作目录..." readonly>
+                    <button class="btn-ghost btn-sm" onclick="browseDirectory('dir-path')">浏览</button>
+                </div>
+            </div>
+            <div class="input-group">
+                <label>输出目录</label>
+                <div class="input-row">
+                    <input type="text" id="out-dir" placeholder="选择输出目录...">
+                    <button id="btn-browse-out" class="btn-ghost btn-sm" onclick="browseDirectory('out-dir')">浏览</button>
+                </div>
+            </div>
+            <div class="toggle-row">
+                <button id="btn-save-to-src" class="btn-toggle off" onclick="toggleSaveToSource()">输出到源目录：关</button>
+                <span class="hint" id="output-hint"></span>
+            </div>
+            <div class="action-row">
+                <button class="btn-primary" onclick="scanDirectory()">扫描工作目录</button>
+                <button class="btn-ghost" onclick="pickFiles('transcripts')">选择字幕文件</button>
+                <button class="btn-ghost" onclick="pickFiles('videos')">选择视频文件</button>
+                <button class="btn-ghost" onclick="pickFiles('notes')">选择往期笔记</button>
+            </div>
+            <div class="stats-strip">
+                <span class="stats-number" id="task-count">0</span>
+                <span class="stats-label" id="task-breakdown">字幕 0 / 视频 0 / 往期笔记 0</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="section-card card-grow">
+        <div class="card-header">
+            <span>课程任务列表</span>
+            <span class="list-count" id="list-count"></span>
+            <button class="btn-danger-ghost btn-sm" onclick="removeSelected()">移除所选字幕</button>
+        </div>
+        <div class="card-body" style="padding:0">
+            <div class="tree-container">
+                <table id="file-tree">
+                    <thead>
+                        <tr>
+                            <th class="col-lesson">字幕</th>
+                            <th class="col-folder">来源目录</th>
+                            <th class="col-video">视频</th>
+                            <th class="col-mode">模式</th>
+                            <th class="col-status">状态</th>
+                        </tr>
+                    </thead>
+                    <tbody id="file-tree-body">
+                        <tr class="tree-empty"><td colspan="5">暂无任务，请扫描或选择文件</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Tab 2: 课程设置 -->
+<section id="tab-course" class="tab-panel hidden">
+    <div class="section-card">
+        <div class="card-header">课程整理设置</div>
+        <div class="card-body">
+            <div class="input-group">
+                <label>课程名称</label>
+                <input type="text" id="course-name" placeholder="留空也可以，不影响生成结构">
+            </div>
+            <div class="input-group">
+                <label>课程总体要求</label>
+                <textarea id="requirements" rows="8" placeholder="对整理结果的额外说明，可留空..."></textarea>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Tab 3: 开始运行 -->
+<section id="tab-run" class="tab-panel hidden">
+    <div class="section-card">
+        <div class="card-header">进度总览</div>
+        <div class="card-body">
+            <div class="control-row">
+                <button id="btn-start" class="btn-primary" onclick="startRun()">▶  开始整理</button>
+                <button id="btn-cancel" class="btn-danger-ghost hidden" onclick="cancelRun()">取消</button>
+                <button class="btn-ghost" onclick="clearOutput()">清空输出</button>
+                <span class="status-text" id="status-text">就绪，请先在"选择文件"中添加任务</span>
+            </div>
+            <div class="chip-row">
+                <span class="chip" id="chip-current-file">等待任务</span>
+                <span class="chip" id="chip-chars">0 chars</span>
+                <span class="chip" id="chip-pulse">idle</span>
+            </div>
+            <div class="progress-row">
+                <div class="progress-bar-container">
+                    <div class="progress-bar" id="progress-bar" style="width:0%"></div>
+                </div>
+                <span class="progress-pct" id="progress-pct">0%</span>
+            </div>
+            <span class="progress-label" id="progress-label">就绪</span>
+        </div>
+    </div>
+
+    <div class="section-card console-card card-grow">
+        <div class="card-header">
+            <span>Console</span>
+            <span class="console-file" id="console-file"></span>
+        </div>
+        <div class="card-body" style="padding:0;flex:1;display:flex">
+            <div class="console-output" id="console-output">
+                <span class="console-placeholder" id="console-placeholder">等待任务开始...这里会显示模型实时输出...</span>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Tab 4: API设置 -->
+<section id="tab-config" class="tab-panel hidden">
+    <div class="section-card">
+        <div class="card-header">模型与接口</div>
+        <div class="card-body">
+            <div class="input-group">
+                <label>API 平台</label>
+                <select id="provider-select"></select>
+            </div>
+            <div class="input-group">
+                <label>模型</label>
+                <input type="text" id="model-input" placeholder="模型名称">
+            </div>
+            <div class="input-group">
+                <label>接口地址</label>
+                <input type="text" id="url-input" placeholder="API 接口地址">
+            </div>
+            <div class="input-group">
+                <label>密钥</label>
+                <input type="password" id="key-input" placeholder="API Key">
+            </div>
+            <span class="hint">当前平台会分别记住自己的模型、接口地址和 API Key。</span>
+            <div class="action-row">
+                <button class="btn-ghost" onclick="saveConfig()">保存配置</button>
+                <button class="btn-ghost" onclick="testConfig()">测试配置</button>
+                <span id="config-chips"></span>
+            </div>
+            <div id="config-validation-msg" class="validation-msg hidden"></div>
+        </div>
+    </div>
+</section>
+
+<!-- Tab 5: 关于 -->
+<section id="tab-about" class="tab-panel hidden">
+    <div class="section-card about-card">
+        <div class="card-header">关于项目</div>
+        <div class="card-body about-body">
+            <a href="https://github.com/AsukaIIV" target="_blank" class="about-author">
+                <img src="https://github.com/AsukaIIV.png" alt="AsukaIIV" class="about-avatar">
+                <span class="about-username">AsukaIIV</span>
+            </a>
+            <a href="https://github.com/AsukaIIV/srt-summarizer" target="_blank" class="about-repo-link">
+                <svg class="about-repo-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+                srt-summarizer
+                <svg class="about-ext-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+            </a>
+            <p class="about-desc">AI 驱动的课堂录播字幕整理工具，支持图文混排、视频截图、多平台 LLM。</p>
+        </div>
+    </div>
+</section>
+
+<!-- Directory selection uses native Windows dialogs via /api/pick/folder and /api/pick/files -->
+{% endblock %}

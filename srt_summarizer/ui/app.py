@@ -7,6 +7,7 @@ from srt_summarizer.config import (
     DEFAULT_COURSE_NAME,
     DEFAULT_OUTPUT_DIR,
     DEFAULT_SAVE_TO_SOURCE,
+    _invalidate_config_cache,
     get_config_errors,
     get_runtime_config,
 )
@@ -54,6 +55,7 @@ class App(tk.Tk):
         self._video_files: list[str] = []
         self._prior_note_files: list[str] = []
         self._running = False
+        self._out_auto_scroll = True
         self._compact_mode = False
         self._default_output_dir = self._resolve_default_output_dir()
         self._config_tested_ok = False
@@ -78,6 +80,7 @@ class App(tk.Tk):
         self.after(0, self._resize_tree_columns)
         self.after(300, self._auto_validate_config_on_startup)
         self.bind("<Configure>", self._on_root_resize)
+        self.after_idle(self._setup_out_scroll_detection)
 
     def _load_initial_config(self):
         config = get_runtime_config()
@@ -292,6 +295,7 @@ class App(tk.Tk):
             messagebox.showerror("错误", "；".join(errors))
             return
         save_runtime_config(config)
+        _invalidate_config_cache()
         self._config_tested_ok = False
         self._set_config_validation_message("")
         self._refresh_provider_view()
@@ -526,6 +530,18 @@ class App(tk.Tk):
         self.after(600, self._animate_pulse)
 
     def _run_all(self, runtime_config: RuntimeConfig, out_dir: str):
+        """主处理流水线：配对、解析、抽帧、提示词构建、LLM 调用、图示渲染、Markdown 写入。
+
+        对每个课程依次执行：
+        1. 依赖检查与自动安装
+        2. 字幕-视频配对
+        3. 解析字幕、猜测课程名
+        4. 视频任务提取截图帧
+        5. 构建用户提示词 + 调用 LLM 流式生成
+        6. 提取并渲染结构化图示
+        7. 图片注入 + 写入最终 Markdown
+        8. 更新 task tree 状态
+        """
         installed = ensure_runtime_dependencies()
         if installed:
             self._out_append(f"» 已自动安装依赖：{', '.join(installed)}\n", "success")
@@ -635,7 +651,9 @@ class App(tk.Tk):
                 self._ui(self._tree.set, lesson.transcript_path, "mode", mode_result_label)
                 self._out_append(f"» 输出目录：{bundle_dir}\n», 已保存：{note_path}\n", "success")
                 ok += 1
-            except Exception as e:
+            except BaseException as e:
+                if isinstance(e, (KeyboardInterrupt, SystemExit)):
+                    raise
                 self._set_row(lesson.transcript_path, "✗ 失败", "fail")
                 self._out_append(f"\n» 失败：{e}\n", "error")
                 fail += 1
@@ -666,12 +684,28 @@ class App(tk.Tk):
                     self._tree.item(iid, tags=(tag,))
         self.after(0, _do)
 
+    def _setup_out_scroll_detection(self):
+        if not hasattr(self, "_out_text") or not self._out_text.winfo_exists():
+            self.after_idle(self._setup_out_scroll_detection)
+            return
+        self._out_text.bind("<MouseWheel>", self._on_out_text_scroll, add="+")
+        self._out_text.bind("<Button-4>", self._on_out_text_scroll, add="+")
+        self._out_text.bind("<Button-5>", self._on_out_text_scroll, add="+")
+
+    def _on_out_text_scroll(self, event=None):
+        try:
+            frac = self._out_text.yview()
+            self._out_auto_scroll = frac[1] >= 0.999
+        except Exception:
+            pass
+
     def _out_append(self, text, tag="normal"):
         def _do():
             self._set_output_placeholder(False)
             self._out_text.config(state="normal")
             self._out_text.insert("end", text, tag)
-            self._out_text.see("end")
+            if self._out_auto_scroll:
+                self._out_text.see("end")
             self._out_text.config(state="disabled")
         self.after(0, _do)
 
@@ -680,7 +714,8 @@ class App(tk.Tk):
             self._set_output_placeholder(False)
             self._out_text.config(state="normal")
             self._out_text.insert("end", delta, choose_stream_tag(delta))
-            self._out_text.see("end")
+            if self._out_auto_scroll:
+                self._out_text.see("end")
             self._out_text.config(state="disabled")
         self.after(0, _do)
 

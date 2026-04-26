@@ -250,6 +250,6 @@ def render_diagram_entries(diagram_specs: list[dict[str, Any]], image_dir: str) 
             else:
                 entry = _render_formula_map(spec, out_path)
             entries.append(entry)
-        except Exception as exc:
+        except (OSError, KeyError, ValueError) as exc:
             warnings.append(f"结构化图示《{spec.get('title', index)}》生成失败：{exc}")
     return entries, warnings

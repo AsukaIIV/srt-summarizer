@@ -206,12 +206,6 @@ class StatusChip(tk.Frame):
         self._label.config(text=text, bg=bg, fg=fg)
 
 
-class NotebookPage(ttk.Frame):
-    def __init__(self, parent, **kw):
-        super().__init__(parent, **kw)
-        self.configure(style="Page.TFrame")
-
-
 class ScrollableFrame(tk.Frame):
     _registry: dict[str, "ScrollableFrame"] = {}
 

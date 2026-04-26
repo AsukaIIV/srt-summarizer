@@ -164,7 +164,7 @@ def _save_selected_frames(cv2, image_dir: str, candidates: list[dict], course_na
     return saved
 
 
-def _fallback_uniform_frames(cv2, cap, frame_count: int, image_dir: str, max_frames: int, course_name: str = "") -> list[str]:
+def _fallback_uniform_frames(cv2, cap, frame_count: int, image_dir: str, max_frames: int, course_name: str = "") -> tuple[list[str], list[dict]]:
     step = max(frame_count // max_frames, 1)
     candidates: list[dict] = []
     for index in range(max_frames):
@@ -188,7 +188,8 @@ def _fallback_uniform_frames(cv2, cap, frame_count: int, image_dir: str, max_fra
         unique_candidates.append(candidate)
         if len(unique_candidates) >= max_frames:
             break
-    return _save_selected_frames(cv2, image_dir, unique_candidates, course_name=course_name)
+    saved = _save_selected_frames(cv2, image_dir, unique_candidates, course_name=course_name)
+    return saved, unique_candidates[:len(saved)]
 
 
 def _format_seconds(seconds: float) -> str:
@@ -244,6 +245,19 @@ def extract_video_frame_items(
     course_name: str = "",
     planned_moments: list[float] | None = None,
 ) -> list[dict[str, str]]:
+    """从视频中提取高质量的截图帧。
+
+    策略：
+    1. 优先使用用户指定的 planned_moments 位置
+    2. 然后按字幕时间轴均匀采样（stride 采样）
+    3. 最后补充均匀分布的位置补齐候选数
+    4. 对每个候选帧评分（亮度、清晰度、边缘密度），去重后选最优
+    5. 若优质帧不足，放宽质量限制补充
+    6. 若仍不足，使用 fallback 均匀抽帧
+
+    返回每帧的 path、timestamp、snippet。
+    若视频任务没有生成任何有效截图，会抛出 RuntimeError。
+    """
     if not video_path:
         return []
     try:
@@ -255,93 +269,70 @@ def extract_video_frame_items(
     if not cap.isOpened():
         raise RuntimeError(f"无法打开视频：{video_path}")
 
-    frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
-    if frame_count <= 0:
-        cap.release()
-        return []
+    try:
+        frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+        if frame_count <= 0:
+            return []
 
-    fps = float(cap.get(cv2.CAP_PROP_FPS) or 0.0)
-    max_frames = max(1, min(max_frames, 20))
-    candidate_count = min(max(max_frames * 8, 24), 120)
-    candidates: list[dict] = []
-    normalized_segments = subtitle_segments or []
-    positions = _build_planned_positions(planned_moments or [], fps, frame_count)
-    subtitle_positions = _build_subtitle_positions(normalized_segments, fps, frame_count, max_frames)
-    seen_positions = set(positions)
-    for position in subtitle_positions:
-        if position in seen_positions:
-            continue
-        positions.append(position)
-        seen_positions.add(position)
-    if len(positions) < candidate_count:
-        extra_positions = _build_candidate_positions(frame_count, candidate_count)
-        for position in extra_positions:
+        fps = float(cap.get(cv2.CAP_PROP_FPS) or 0.0)
+        max_frames = max(1, min(max_frames, 20))
+        candidate_count = min(max(max_frames * 8, 24), 120)
+        candidates: list[dict] = []
+        normalized_segments = subtitle_segments or []
+        positions = _build_planned_positions(planned_moments or [], fps, frame_count)
+        subtitle_positions = _build_subtitle_positions(normalized_segments, fps, frame_count, max_frames)
+        seen_positions = set(positions)
+        for position in subtitle_positions:
             if position in seen_positions:
                 continue
             positions.append(position)
             seen_positions.add(position)
-    for position in positions:
-        cap.set(cv2.CAP_PROP_POS_FRAMES, position)
-        ok, frame = cap.read()
-        if not ok:
-            continue
-        score, metrics, preview = _score_frame(cv2, frame)
-        candidates.append(
-            {
-                "position": position,
-                "frame": frame,
-                "score": score,
-                "metrics": metrics,
-                "preview": preview,
-                "timestamp_id": _format_seconds(position / fps if fps > 0 else 0.0).replace(":", "-").replace(".", "-"),
-            }
-        )
+        if len(positions) < candidate_count:
+            extra_positions = _build_candidate_positions(frame_count, candidate_count)
+            for position in extra_positions:
+                if position in seen_positions:
+                    continue
+                positions.append(position)
+                seen_positions.add(position)
+        for position in positions:
+            cap.set(cv2.CAP_PROP_POS_FRAMES, position)
+            ok, frame = cap.read()
+            if not ok:
+                continue
+            score, metrics, preview = _score_frame(cv2, frame)
+            candidates.append(
+                {
+                    "position": position,
+                    "frame": frame,
+                    "score": score,
+                    "metrics": metrics,
+                    "preview": preview,
+                    "timestamp_id": _format_seconds(position / fps if fps > 0 else 0.0).replace(":", "-").replace(".", "-"),
+                }
+            )
 
-    if not candidates:
+        if not candidates:
+            raise RuntimeError("无法提取截图：未能从视频读取到任何帧")
+
+        selected = _select_best_candidates(candidates, max_frames)
+        if len(selected) < max_frames:
+            seen_positions = {item["position"] for item in selected}
+            relaxed_pool = [item for item in candidates if item["position"] not in seen_positions]
+            selected.extend(_select_best_candidates(relaxed_pool, max_frames - len(selected), allow_low_quality=True))
+            selected = sorted(selected, key=lambda item: item["position"])
+
+        if not selected:
+            raise RuntimeError("无法提取有效截图：读取到了视频帧，但都未通过有效性筛选")
+
+        saved = _save_selected_frames(cv2, image_dir, selected, course_name=course_name)
+        if len(saved) < max_frames:
+            fallback_saved, fallback_candidates = _fallback_uniform_frames(
+                cv2, cap, frame_count, image_dir, max_frames, course_name=course_name
+            )
+            if len(fallback_saved) > len(saved):
+                saved = fallback_saved
+                selected = fallback_candidates
+
+        return _build_frame_items(saved, selected, fps, normalized_segments)
+    finally:
         cap.release()
-        raise RuntimeError("无法提取截图：未能从视频读取到任何帧")
-
-    selected = _select_best_candidates(candidates, max_frames)
-    if len(selected) < max_frames:
-        seen_positions = {item["position"] for item in selected}
-        relaxed_pool = [item for item in candidates if item["position"] not in seen_positions]
-        selected.extend(_select_best_candidates(relaxed_pool, max_frames - len(selected), allow_low_quality=True))
-        selected = sorted(selected, key=lambda item: item["position"])
-
-    if not selected:
-        cap.release()
-        raise RuntimeError("无法提取有效截图：读取到了视频帧，但都未通过有效性筛选")
-
-    saved = _save_selected_frames(cv2, image_dir, selected, course_name=course_name)
-    if len(saved) < max_frames:
-        fallback_saved = _fallback_uniform_frames(cv2, cap, frame_count, image_dir, max_frames, course_name=course_name)
-        if len(fallback_saved) > len(saved):
-            saved = fallback_saved
-            selected = [
-                {"position": min(index * max(frame_count // max_frames, 1), max(frame_count - 1, 0))}
-                for index in range(len(saved))
-            ]
-
-    cap.release()
-    return _build_frame_items(saved, selected, fps, normalized_segments)
-
-
-def extract_video_frames(
-    video_path: str,
-    image_dir: str,
-    max_frames: int = 8,
-    subtitle_segments: list[dict] | None = None,
-    course_name: str = "",
-    planned_moments: list[float] | None = None,
-) -> list[str]:
-    return [
-        item["path"]
-        for item in extract_video_frame_items(
-            video_path,
-            image_dir,
-            max_frames=max_frames,
-            subtitle_segments=subtitle_segments,
-            course_name=course_name,
-            planned_moments=planned_moments,
-        )
-    ]

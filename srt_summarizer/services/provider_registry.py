@@ -16,7 +16,7 @@ PROVIDERS: dict[str, ProviderDefinition] = {
         key="deepseek",
         label="DeepSeek",
         base_url="https://api.deepseek.com/v1/chat/completions",
-        default_model="deepseek-reasoner",
+        default_model="deepseek-v4-flash",
         api_style="openai_chat",
         config_help_text="使用 DeepSeek 官方接口。",
     ),

@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SRT-SUMMARIZER — 课堂资料整理</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/app.css">
+</head>
+<body>
+    <nav id="top-nav">
+        <div class="nav-brand">
+            <span class="brand-mark">&#10038;</span>
+            <span class="brand-title">SRT-SUMMARIZER</span>
+            <span class="brand-subtitle">课堂资料整理</span>
+        </div>
+        <div class="nav-badges">
+            <span id="nav-config-chip" class="chip chip-warn">未配置</span>
+            <span id="nav-provider-badge" class="chip"></span>
+        </div>
+    </nav>
+
+    <main id="app-main">
+        {% block content %}{% endblock %}
+    </main>
+
+    <script src="/static/js/app.js"></script>
+    <script src="/static/js/file_browser.js"></script>
+</body>
+</html>

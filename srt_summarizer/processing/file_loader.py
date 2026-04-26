@@ -26,6 +26,12 @@ def parse_file(filepath: str) -> str:
 
 
 def parse_srt_segments(filepath: str) -> list[dict[str, float | str]]:
+    """解析 .srt 文件，提取字幕段。
+
+    每段返回 start_seconds、end_seconds、text。
+    跳过序号行、无效时间戳、空文本段。
+    非 .srt 文件返回空列表。
+    """
     if not filepath.lower().endswith(".srt"):
         return []
     content = parse_file(filepath)
@@ -55,44 +61,3 @@ def parse_srt_segments(filepath: str) -> list[dict[str, float | str]]:
             }
         )
     return segments
-
-
-def summarize_content_density(segments: list[dict[str, float | str]]) -> dict[str, float | int | list[dict[str, float]]]:
-    if not segments:
-        return {
-            "duration_seconds": 0.0,
-            "segment_count": 0,
-            "total_chars": 0,
-            "avg_chars_per_minute": 0.0,
-            "peak_chars_per_minute": 0.0,
-            "dense_ranges": [],
-        }
-    ordered = sorted(segments, key=lambda item: float(item.get("start_seconds", 0)))
-    duration_seconds = max(float(ordered[-1].get("end_seconds", 0)) - float(ordered[0].get("start_seconds", 0)), 0.0)
-    total_chars = sum(len(str(item.get("text", "")).strip()) for item in ordered)
-    avg_chars_per_minute = total_chars / max(duration_seconds / 60, 1e-6)
-    windows: list[dict[str, float]] = []
-    peak_chars_per_minute = 0.0
-    for segment in ordered:
-        start = float(segment.get("start_seconds", 0))
-        window_end = start + 60.0
-        chars = 0
-        for other in ordered:
-            other_start = float(other.get("start_seconds", 0))
-            if start <= other_start < window_end:
-                chars += len(str(other.get("text", "")).strip())
-        peak_chars_per_minute = max(peak_chars_per_minute, float(chars))
-        windows.append({"start": start, "end": min(window_end, float(ordered[-1].get("end_seconds", 0))), "chars": float(chars)})
-    dense_ranges = [
-        {"start": window["start"], "end": window["end"], "chars": window["chars"]}
-        for window in sorted(windows, key=lambda item: item["chars"], reverse=True)[:5]
-        if window["chars"] > 0
-    ]
-    return {
-        "duration_seconds": round(duration_seconds, 2),
-        "segment_count": len(ordered),
-        "total_chars": total_chars,
-        "avg_chars_per_minute": round(avg_chars_per_minute, 2),
-        "peak_chars_per_minute": round(peak_chars_per_minute, 2),
-        "dense_ranges": dense_ranges,
-    }
